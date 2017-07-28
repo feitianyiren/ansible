@@ -130,9 +130,9 @@ EXAMPLES = '''
 '''
 __author__ = 'yasensim'
 
-import os, tarfile, requests, ssl, sys, time
+import tarfile
+from time import sleep
 from threading import Timer
-from six.moves.urllib.request import Request, urlopen
 from xml.dom import minidom
 try:
     from pyVmomi import vim, vmodl
@@ -143,19 +143,20 @@ except ImportError:
 
 
 class OvfHandler(object):
-    def __init__(self, ovafile):
-        self.handle = self._create_file_handle(ovafile)
+    def __init__(self, ovafile, module):
+        self.handle = self._create_file_handle(ovafile, module)
         self.tarfile = tarfile.open(fileobj=self.handle)
         ovffilename = list(filter(lambda x: x.endswith(".ovf"),
                                   self.tarfile.getnames()))[0]
         ovffile = self.tarfile.extractfile(ovffilename)
         self.descriptor = ovffile.read().decode()
+        self.module = module
 
-    def _create_file_handle(self, entry):
+    def _create_file_handle(self, entry, module):
         if os.path.exists(entry):
             return FileHandle(entry)
         else:
-            return WebHandle(entry)
+            return WebHandle(entry, module)
 
     def get_descriptor(self):
         return self.descriptor
@@ -198,12 +199,9 @@ class OvfHandler(object):
         deviceUrl = self.get_device_url(fileItem, lease)
         url = deviceUrl.url.replace('*', host)
         headers = {'Content-length': get_tarfile_size(ovffile)}
-        if hasattr(ssl, '_create_unverified_context'):
-            sslContext = ssl._create_unverified_context()
-        else:
-            sslContext = None
-        req = Request(url, ovffile, headers)
-        urlopen(req)
+
+        r = open_url(url, data=ovffile, headers=headers, validate_certs=self.module.params['validate_certs'])
+        r.close()
 
     def start_timer(self):
         Timer(5, self.timer).start()
@@ -257,14 +255,16 @@ class FileHandle(object):
 
 
 class WebHandle(object):
-    def __init__(self, url):
+    def __init__(self, url, module):
+        self.module = module
         self.url = url
-        r = urlopen(url)
-        if r.code != 200:
-            raise FileNotFoundError(url)
-        self.headers = self._headers_to_dict(r)
+        resp, info = fetch_url(self.module, self.url)
+        status_code = info["status"]
+        if status_code != 200:
+            self.module.fail_json(msg='Failed getting the OVA File, {}'.format(info['body']))
+        self.headers = self._headers_to_dict(resp)
         if 'accept-ranges' not in self.headers:
-            raise Exception("Site does not accept ranges")
+            self.module.fail_json("Site does not accept ranges")
         self.st_size = int(self.headers['content-length'])
         self.offset = 0
 
@@ -298,12 +298,11 @@ class WebHandle(object):
     def read(self, amount):
         start = self.offset
         end = self.offset + amount - 1
-        req = Request(self.url,
-                      headers={'Range': 'bytes=%d-%d' % (start, end)})
-        r = urlopen(req)
+        headers = {'Range': 'bytes=%d-%d' % (start, end)}
+        resp, info = fetch_url(self.module, self.url, headers=headers)
         self.offset += amount
-        result = r.read(amount)
-        r.close()
+        result = resp.read(amount)
+        resp.close()
         return result
 
     def progress(self):
@@ -420,7 +419,7 @@ def get_tarfile_size(tarfile):
 
 def upload_ova(module, content):
     ova_path = module.params['path_to_ova'] + "/" + module.params['ova_file']
-    ovf_handler = OvfHandler(ova_path)
+    ovf_handler = OvfHandler(ova_path, module)
     ovfManager = content.ovfManager
     objs = get_objects(content, module)
     spec_params = vim.OvfManager.CreateImportSpecParams()
@@ -456,7 +455,7 @@ def upload_ova(module, content):
 
 def getPropertyMap(module):
     ova_path = module.params['path_to_ova'] + "/" + module.params['ova_file']
-    ovf_handler = OvfHandler(ova_path)
+    ovf_handler = OvfHandler(ova_path, module)
     ovf_descriptor = ovf_handler.get_descriptor()
     dom = minidom.parseString(ovf_descriptor)
     section = dom.getElementsByTagName("ProductSection")[0]
@@ -499,7 +498,6 @@ def main():
         props = getPropertyMap(module)
         module.exit_json(changed=True, msg="OVF Properties that can be used: {}".format(props))
 
-
     content = connect_to_api(module)
     nsx_manager_vm = get_obj(content, [vim.VirtualMachine], module.params['vmname'])
     if nsx_manager_vm:
@@ -510,6 +508,7 @@ def main():
 
 from ansible.module_utils.basic import *
 from ansible.module_utils.vmware import *
+from ansible.module_utils.urls import *
 
 if __name__ == "__main__":
     exit(main())
