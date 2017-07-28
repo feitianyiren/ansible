@@ -331,15 +331,15 @@ def get_obj_in_list(obj_name, obj_list):
 def get_objects(content, module): 
     datacenter_list = content.rootFolder.childEntity
     if module.params['datacenter']:
-	datacenter_obj = find_datacenter_by_name(content, module.params['datacenter'])
+        datacenter_obj = find_datacenter_by_name(content, module.params['datacenter'])
     datastore_list = datacenter_obj.datastoreFolder.childEntity
     if module.params['datastore']:
-	datastore_obj = find_datastore_by_name(content, module.params['datastore'])
+        datastore_obj = find_datastore_by_name(content, module.params['datastore'])
     else:
         print "No datastores found in DC (%s)." % datacenter_obj.name
     cluster_list = datacenter_obj.hostFolder.childEntity
     if module.params['cluster']:
-	cluster_obj = find_cluster_by_name(content, module.params['cluster'])
+        cluster_obj = find_cluster_by_name(content, module.params['cluster'])
     elif len(cluster_list) > 0:
         cluster_obj = cluster_list[0]
     else:
@@ -375,30 +375,30 @@ def changeNIC(module, content):
     device_change = []
     for device in vm.config.hardware.device:
         if isinstance(device, vim.vm.device.VirtualEthernetCard):
-    	    nicspec = vim.vm.device.VirtualDeviceSpec()
+            nicspec = vim.vm.device.VirtualDeviceSpec()
             nicspec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
             nicspec.device = device
             nicspec.device.wakeOnLanEnabled = True
-	    if net_moreff is not None:
-                nicspec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
-                nicspec.device.backing.network = get_obj(content, [vim.Network], module.params['portgroup'])
-                nicspec.device.backing.deviceName = module.params['portgroup']
-		nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
-		nicspec.device.connectable.startConnected = True
-		nicspec.device.connectable.allowGuestControl = True
-		device_change.append(nicspec)
-	    else:
-		network = get_obj(content,[vim.dvs.DistributedVirtualPortgroup], module.params['portgroup'])
-    		dvs_port_connection = vim.dvs.PortConnection()
-    		dvs_port_connection.portgroupKey = network.key
-    		dvs_port_connection.switchUuid = network.config.distributedVirtualSwitch.uuid
-    		nicspec.device.backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
-    		nicspec.device.backing.port = dvs_port_connection
-		nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
-		nicspec.device.connectable.startConnected = True
-		nicspec.device.connectable.allowGuestControl = True
-		device_change.append(nicspec)
-	    break
+        if net_moreff is not None:
+            nicspec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+            nicspec.device.backing.network = get_obj(content, [vim.Network], module.params['portgroup'])
+            nicspec.device.backing.deviceName = module.params['portgroup']
+            nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+            nicspec.device.connectable.startConnected = True
+            nicspec.device.connectable.allowGuestControl = True
+            device_change.append(nicspec)
+        else:
+            network = get_obj(content,[vim.dvs.DistributedVirtualPortgroup], module.params['portgroup'])
+            dvs_port_connection = vim.dvs.PortConnection()
+            dvs_port_connection.portgroupKey = network.key
+            dvs_port_connection.switchUuid = network.config.distributedVirtualSwitch.uuid
+            nicspec.device.backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
+            nicspec.device.backing.port = dvs_port_connection
+            nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+            nicspec.device.connectable.startConnected = True
+            nicspec.device.connectable.allowGuestControl = True
+            device_change.append(nicspec)
+            break
     config_spec = vim.vm.ConfigSpec(deviceChange=device_change)
     task = vm.ReconfigVM_Task(config_spec)
     wait_for_task(task)
@@ -462,9 +462,9 @@ def getPropertyMap(module):
     section = dom.getElementsByTagName("ProductSection")[0]
     propertyMap = {}
     for property in section.getElementsByTagName("Property"):
-	key   = property.getAttribute("ovf:key")
-	value = property.getAttribute("ovf:value")
-	propertyMap[key] = value
+        key   = property.getAttribute("ovf:key")
+        value = property.getAttribute("ovf:value")
+        propertyMap[key] = value
     dom.unlink()
     return str(propertyMap)
 
@@ -483,8 +483,8 @@ def main():
             disk_mode=dict(default='thin'),
             username=dict(required=True, type='str'),
             password=dict(required=True, type='str', no_log=True),
-	    validate_certs=dict(type='str'),
-	    properties=dict(required=False, type='dict', no_log=True)
+        validate_certs=dict(type='str'),
+        properties=dict(required=False, type='dict', no_log=True)
         ),
         supports_check_mode=True
     )
@@ -493,7 +493,7 @@ def main():
     sys.setdefaultencoding('utf8')
     requests.packages.urllib3.disable_warnings()
     if not HAS_PYVMOMI:
-	module.fail_json(msg='pyvmomi is required for this module')
+        module.fail_json(msg='pyvmomi is required for this module')
 
     if module.check_mode:
         props = getPropertyMap(module)
