@@ -368,9 +368,6 @@ def changeNIC(module, content):
     net_moreff = get_obj(content, [vim.Network], module.params['portgroup'])
     vm = get_obj(content, [vim.VirtualMachine], module.params['vmname'])
     print "Net {} VM {}".format(str(net_moreff), str(vm))
-    if net_moreff is None:
-        invoke_and_track(vm.PowerOn, None)
-        sleep(150)
     device_change = []
     for device in vm.config.hardware.device:
         if isinstance(device, vim.vm.device.VirtualEthernetCard):
@@ -378,25 +375,25 @@ def changeNIC(module, content):
             nicspec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
             nicspec.device = device
             nicspec.device.wakeOnLanEnabled = True
-        if net_moreff is not None:
-            nicspec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
-            nicspec.device.backing.network = get_obj(content, [vim.Network], module.params['portgroup'])
-            nicspec.device.backing.deviceName = module.params['portgroup']
-            nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
-            nicspec.device.connectable.startConnected = True
-            nicspec.device.connectable.allowGuestControl = True
-            device_change.append(nicspec)
-        else:
-            network = get_obj(content,[vim.dvs.DistributedVirtualPortgroup], module.params['portgroup'])
-            dvs_port_connection = vim.dvs.PortConnection()
-            dvs_port_connection.portgroupKey = network.key
-            dvs_port_connection.switchUuid = network.config.distributedVirtualSwitch.uuid
-            nicspec.device.backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
-            nicspec.device.backing.port = dvs_port_connection
-            nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
-            nicspec.device.connectable.startConnected = True
-            nicspec.device.connectable.allowGuestControl = True
-            device_change.append(nicspec)
+            if net_moreff is not None:
+                nicspec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+                nicspec.device.backing.network = get_obj(content, [vim.Network], module.params['portgroup'])
+                nicspec.device.backing.deviceName = module.params['portgroup']
+                nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+                nicspec.device.connectable.startConnected = True
+                nicspec.device.connectable.allowGuestControl = True
+                device_change.append(nicspec)
+            else:
+                network = get_obj(content,[vim.dvs.DistributedVirtualPortgroup], module.params['portgroup'])
+                dvs_port_connection = vim.dvs.PortConnection()
+                dvs_port_connection.portgroupKey = network.key
+                dvs_port_connection.switchUuid = network.config.distributedVirtualSwitch.uuid
+                nicspec.device.backing = vim.vm.device.VirtualEthernetCard.DistributedVirtualPortBackingInfo()
+                nicspec.device.backing.port = dvs_port_connection
+                nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
+                nicspec.device.connectable.startConnected = True
+                nicspec.device.connectable.allowGuestControl = True
+                device_change.append(nicspec)
             break
     config_spec = vim.vm.ConfigSpec(deviceChange=device_change)
     task = vm.ReconfigVM_Task(config_spec)
