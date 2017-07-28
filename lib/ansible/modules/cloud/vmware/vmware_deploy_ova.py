@@ -469,29 +469,29 @@ def getPropertyMap(module):
     return str(propertyMap)
 
 def main():
+    argument_spec = vmware_argument_spec()
 
-    module = AnsibleModule(
-        argument_spec=dict(
+    argument_spec.update(
+        dict(
             datacenter=dict(required=True, type='str'),
             datastore=dict(required=True, type='str'),
             portgroup=dict(required=True, type='str'),
             cluster=dict(required=True, type='str'),
             vmname=dict(required=True, type='str'),
-            hostname=dict(required=True, type='str'),
             path_to_ova=dict(required=True, type='str'),
             ova_file=dict(required=True, type='str'),
             disk_mode=dict(default='thin'),
-            username=dict(required=True, type='str'),
-            password=dict(required=True, type='str', no_log=True),
-        validate_certs=dict(type='str'),
-        properties=dict(required=False, type='dict', no_log=True)
-        ),
-        supports_check_mode=True
+            properties=dict(required=False, type='dict', no_log=True)
+        )
     )
+
+    module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
 
     reload(sys)
     sys.setdefaultencoding('utf8')
+
     requests.packages.urllib3.disable_warnings()
+
     if not HAS_PYVMOMI:
         module.fail_json(msg='pyvmomi is required for this module')
 
