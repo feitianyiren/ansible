@@ -309,45 +309,20 @@ class WebHandle(object):
         return int(100.0 * self.offset / self.st_size)
 
 
-def get_obj(content, vimtype, name):
-    obj = None
-    container = content.viewManager.CreateContainerView(content.rootFolder, vimtype, True)
-    for view in container.view:
-        if view.name == name:
-            obj = view
-            break
-    return obj
-
-def get_obj_in_list(obj_name, obj_list):
-    for o in obj_list:
-        if o.name == obj_name:
-            return o
-    print ("Unable to find object by the name of %s in list:\n%s" %
-           (o.name, map(lambda o: o.name, obj_list)))
-    exit(1)
-
-
 def get_objects(content, module): 
-    datacenter_list = content.rootFolder.childEntity
-    if module.params['datacenter']:
-        datacenter_obj = find_datacenter_by_name(content, module.params['datacenter'])
-    datastore_list = datacenter_obj.datastoreFolder.childEntity
-    if module.params['datastore']:
-        datastore_obj = find_datastore_by_name(content, module.params['datastore'])
-    else:
-        print "No datastores found in DC (%s)." % datacenter_obj.name
-    cluster_list = datacenter_obj.hostFolder.childEntity
-    if module.params['cluster']:
-        cluster_obj = find_cluster_by_name(content, module.params['cluster'])
-    elif len(cluster_list) > 0:
-        cluster_obj = cluster_list[0]
-    else:
-        print "No clusters found in DC (%s)." % datacenter_obj.name
+    datacenter_obj = find_datacenter_by_name(content, module.params['datacenter'])
+    if not datacenter_obj:
+        module.fail_json(msg='Datacenter {} not found on vCenter'.format(module.params['datacenter']))
+    datastore_obj = find_datastore_by_name(content, module.params['datastore'])
+    if not datastore_obj:
+        module.fail_json(msg='Datastore {} not found on vCenter'.format(module.params['datastore']))
+    cluster_obj = find_cluster_by_name(content, module.params['cluster'])
+    if not cluster_obj:
+        module.fail_json(msg='Cluster {} not found on vCenter'.format(module.params['cluster']))
     resource_pool_obj = cluster_obj.resourcePool
 
-    return {"datacenter": datacenter_obj,
-            "datastore": datastore_obj,
-            "resource pool": resource_pool_obj}
+    return {"datacenter": datacenter_obj, "datastore": datastore_obj, "resource pool": resource_pool_obj}
+
 
 def genOvf(ovfkey, ovfvalue, ovfd, module):
     xmldoc = minidom.parseString(ovfd)
@@ -365,26 +340,35 @@ def genOvf(ovfkey, ovfvalue, ovfd, module):
 
 
 def changeNIC(module, content):
-    net_moreff = get_obj(content, [vim.Network], module.params['portgroup'])
-    vm = get_obj(content, [vim.VirtualMachine], module.params['vmname'])
-    print "Net {} VM {}".format(str(net_moreff), str(vm))
+    net_moreff = find_obj(content, [vim.Network], module.params['portgroup'])
+    vm = find_vm_by_name(content, module.params['vmname'])
+    if not net_moreff:
+        module.fail_json(msg="Net {} not found on vCenter".format(net_moreff))
+    if not vm:
+        module.fail_json(msg="VM {} not found on vCenter".format(vm))
+
+    is_vds_pg = True
+    if type(net_moreff) == vim.Network:
+        is_vds_pg = False
+
     device_change = []
+
     for device in vm.config.hardware.device:
         if isinstance(device, vim.vm.device.VirtualEthernetCard):
             nicspec = vim.vm.device.VirtualDeviceSpec()
             nicspec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
             nicspec.device = device
             nicspec.device.wakeOnLanEnabled = True
-            if net_moreff is not None:
+            if not is_vds_pg:
                 nicspec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
-                nicspec.device.backing.network = get_obj(content, [vim.Network], module.params['portgroup'])
+                nicspec.device.backing.network = net_moreff
                 nicspec.device.backing.deviceName = module.params['portgroup']
                 nicspec.device.connectable = vim.vm.device.VirtualDevice.ConnectInfo()
                 nicspec.device.connectable.startConnected = True
                 nicspec.device.connectable.allowGuestControl = True
                 device_change.append(nicspec)
-            else:
-                network = get_obj(content,[vim.dvs.DistributedVirtualPortgroup], module.params['portgroup'])
+            elif is_vds_pg:
+                network = net_moreff
                 dvs_port_connection = vim.dvs.PortConnection()
                 dvs_port_connection.portgroupKey = network.key
                 dvs_port_connection.switchUuid = network.config.distributedVirtualSwitch.uuid
@@ -395,6 +379,7 @@ def changeNIC(module, content):
                 nicspec.device.connectable.allowGuestControl = True
                 device_change.append(nicspec)
             break
+
     config_spec = vim.vm.ConfigSpec(deviceChange=device_change)
     task = vm.ReconfigVM_Task(config_spec)
     wait_for_task(task)
@@ -496,7 +481,8 @@ def main():
         module.exit_json(changed=True, msg="OVF Properties that can be used: {}".format(props))
 
     content = connect_to_api(module)
-    nsx_manager_vm = get_obj(content, [vim.VirtualMachine], module.params['vmname'])
+
+    nsx_manager_vm = find_vm_by_name(content, module.params['vmname'])
     if nsx_manager_vm:
         module.exit_json(changed=False, result='A VM with the name {} is already present!'.format(module.params['vmname']))
 
