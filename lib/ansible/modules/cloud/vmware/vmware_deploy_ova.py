@@ -349,7 +349,7 @@ def get_objects(content, module):
             "datastore": datastore_obj,
             "resource pool": resource_pool_obj}
 
-def genOvf(ovfkey, ovfvalue, ovfd):
+def genOvf(ovfkey, ovfvalue, ovfd, module):
     xmldoc = minidom.parseString(ovfd)
     itemlist = xmldoc.getElementsByTagName('Property')
     check=0
@@ -358,9 +358,9 @@ def genOvf(ovfkey, ovfvalue, ovfd):
             s.setAttribute("ovf:value", ovfvalue)
             check=1
     if check==0:
-        print "There is NO property {} in the OVF, possible properties are {}".format(ovfkey, getPropertyMap(ovfd))          
+        module.fail_json(msg="There is NO property {} in the OVF, "
+                             "possible properties are {}".format(ovfkey, getPropertyMap(module)))
     pretty_xml_as_string = xmldoc.toprettyxml()
-#    xmlContent = pretty_xml_as_string.encode('ascii', 'ignore')
     return pretty_xml_as_string
 
 
@@ -424,7 +424,7 @@ def upload_ova(module, content):
     ovf_descriptor = ovf_handler.get_descriptor()
     if module.params['properties']:
         for key, value in module.params['properties'].iteritems():
-            ovf_descriptor = genOvf(str(key), str(value), ovf_descriptor)
+            ovf_descriptor = genOvf(str(key), str(value), ovf_descriptor, module)
     import_spec = ovfManager.CreateImportSpec(ovf_descriptor,
                                            objs["resource pool"],
                                            objs["datastore"],
